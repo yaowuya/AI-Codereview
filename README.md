@@ -1,11 +1,13 @@
 ![Push图片](doc/img/open/ai-codereview-cartoon.png)
 
-[开源版](README.md) | 
+[开源版](README.md) |
 [Pro版](doc/pro.md)
 
 ## 项目简介
 
 本项目是一个基于大模型的自动化代码审查工具，帮助开发团队在代码合并或提交时，快速进行智能化的审查(Code Review)，提升代码质量和开发效率。
+
+fork自：https://github.com/sunmh207/AI-Codereview-Gitlab
 
 ## 功能
 
@@ -18,9 +20,9 @@
 - 📊 可视化 Dashboard
   - 集中展示所有 Code Review 记录，项目统计、开发者统计，数据说话，甩锅无门！
 - 🎭 Review Style 任你选
-  - 专业型 🤵：严谨细致，正式专业。 
-  - 讽刺型 😈：毒舌吐槽，专治不服（"这代码是用脚写的吗？"） 
-  - 绅士型 🌸：温柔建议，如沐春风（"或许这里可以再优化一下呢~"） 
+  - 专业型 🤵：严谨细致，正式专业。
+  - 讽刺型 😈：毒舌吐槽，专治不服（"这代码是用脚写的吗？"）
+  - 绅士型 🌸：温柔建议，如沐春风（"或许这里可以再优化一下呢~"）
   - 幽默型 🤪：搞笑点评，快乐改码（"这段 if-else 比我的相亲经历还曲折！"）
 
 **效果图:**
@@ -46,12 +48,14 @@ Note 中，便于团队查看和处理。
 **1. 准备环境文件**
 
 - 克隆项目仓库：
+
 ```aiignore
 git clone https://github.com/sunmh207/AI-Codereview-Gitlab.git
 cd AI-Codereview-Gitlab
 ```
 
 - 创建配置文件：
+
 ```aiignore
 cp conf/.env.dist conf/.env
 ```
@@ -145,11 +149,14 @@ streamlit run ui.py --server.port=5002 --server.address=0.0.0.0
 **备注**
 
 1. Token使用优先级
-  - 系统优先使用 .env 文件中的 GITLAB_ACCESS_TOKEN。
-  - 如果 .env 文件中没有配置 GITLAB_ACCESS_TOKEN，则使用 Webhook 传递的Secret Token。
+
+- 系统优先使用 .env 文件中的 GITLAB_ACCESS_TOKEN。
+- 如果 .env 文件中没有配置 GITLAB_ACCESS_TOKEN，则使用 Webhook 传递的Secret Token。
+
 2. 网络访问要求
-  - 请确保 GitLab 能够访问本系统。
-  - 若内网环境受限，建议将系统部署在外网服务器上。
+
+- 请确保 GitLab 能够访问本系统。
+- 若内网环境受限，建议将系统部署在外网服务器上。
 
 ### 配置消息推送
 
@@ -191,47 +198,3 @@ python -m biz.cmd.review
 **2.其它常见问题**
 
 参见 [常见问题](doc/faq.md)
-
-## 🏆 Code Review Pro 版
-
-功能更丰富的 AI Code Review 版本
-
-体验站: [https://demo.mzfuture.com](https://demo.mzfuture.com)
-
-项目介绍与使用说明 [Code Review Pro 版](doc/pro.md)
-
-快速启动命令
-```
- curl -fsSL https://raw.githubusercontent.com/sunmh207/AI-Codereview-Gitlab/refs/heads/main/scripts/pro/install.sh | bash
-```
-
-**多种统计图**
-![多种统计图](doc/img/pro/dashboard.png)
-
-**成员提交分析** 
-![成员提交分析](doc/img/pro/member-analysis.png)
-
-**Deep Review** 
-![Deep Review](doc/img/pro/deepreview.png)
-
-**项目哨兵** 
-![项目哨兵](doc/img/pro/project-analysis-plan.png)
-
-## 相关项目
-
-如果你正在使用 AI Agent 开发工具 (如: Cursor、Cloude Code ...)，并希望对人机交互过程进行全面的记录与回溯分析，推荐使用 [Entire Dashboard](https://github.com/sunmh207/entire-dashboard)。该项目提供了完整的人机交互记录与可视化分析功能，可帮助你深入理解 AI Agent 的使用模式，优化交互体验，提升开发效率。
-
-## 交流
-
-若本项目对您有帮助，欢迎 Star ⭐️ 或 Fork。 有任何问题或建议，欢迎提交 Issue 或 PR。
-
-也欢迎加微信/微信群，一起交流学习。
-
-<p float="left">
-  <img src="doc/img/open/wechat.jpg" width="400" />
-  <img src="doc/img/open/wechat_group.jpg" width="400" /> 
-</p>
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=sunmh207/AI-Codereview-Gitlab&type=Timeline)](https://www.star-history.com/#sunmh207/AI-Codereview-Gitlab&Timeline)
