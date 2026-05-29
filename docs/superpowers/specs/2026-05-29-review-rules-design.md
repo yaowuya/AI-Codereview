@@ -1,29 +1,29 @@
-# Review Rules Configuration Design
+# Review 规则配置设计
 
-## Context
+## 背景
 
-The current service reviews code from GitLab, GitHub, and Gitea webhook events, then sends review notifications through DingTalk, WeCom, Feishu, and an extra webhook. WeCom already supports a global low-score threshold and has partial environment-variable routing by project name or platform URL slug, but this does not scale well when many repositories need different WeCom robots or different alert thresholds.
+当前服务会处理 GitLab、GitHub 和 Gitea 的 webhook 事件，对代码进行 AI Review，然后通过钉钉、企业微信、飞书和额外自定义 webhook 推送审查结果。企业微信目前已经支持全局低分阈值，也有按项目名或平台 URL slug 路由 webhook 的雏形，但当多个仓库需要发送到不同企业微信机器人、并使用不同告警阈值时，这种环境变量配置方式不够清晰，也不方便长期维护。
 
-Some repositories or changes should not trigger AI review at all. The skip decision should be configurable and based on regular expressions against MR/PR titles and commit messages.
+另外，并不是所有代码变更都需要触发 AI Review。是否跳过 Review 应该可配置，并通过正则表达式匹配 MR/PR 标题和 commit message。
 
-## Goals
+## 目标
 
-- Configure different WeCom robots for different repositories.
-- Configure a different WeCom score threshold for each repository.
-- Configure regular expressions that skip AI review for matching MR/PR titles and commit messages.
-- Keep existing `.env` behavior working as a fallback.
-- Apply the behavior consistently across GitLab, GitHub, and Gitea.
+- 支持为不同仓库配置不同的企业微信机器人。
+- 支持为不同仓库配置不同的企业微信分数阈值。
+- 支持用正则表达式匹配 MR/PR 标题和 commit message，从而跳过 AI Review。
+- 保持现有 `.env` 配置行为作为兼容回退。
+- 在 GitLab、GitHub 和 Gitea 上保持一致行为。
 
-## Non-Goals
+## 非目标
 
-- Replacing all existing `.env` notification settings.
-- Adding a UI for rule management.
-- Changing how review scores are parsed from LLM output.
-- Changing DingTalk, Feishu, or extra webhook behavior beyond preserving existing routing.
+- 不替换所有现有 `.env` 通知配置。
+- 不增加规则管理 UI。
+- 不改变 LLM Review 分数解析方式。
+- 不改变钉钉、飞书或额外自定义 webhook 的现有行为，只保留已有路由能力。
 
-## Configuration
+## 配置文件
 
-Add `conf/review_rules.yml`.
+新增 `conf/review_rules.yml`。
 
 ```yaml
 defaults:
@@ -44,95 +44,95 @@ repositories:
     wecom_score_threshold: 90
 ```
 
-Repository keys use the most specific repository identity available:
+仓库 key 使用当前平台能拿到的最具体仓库标识：
 
-- GitHub and Gitea: `repository.full_name`, falling back to `repository.name`.
-- GitLab: `project.path_with_namespace`, falling back to `project.name`.
+- GitHub 和 Gitea：优先使用 `repository.full_name`，取不到时回退到 `repository.name`。
+- GitLab：优先使用 `project.path_with_namespace`，取不到时回退到 `project.name`。
 
-Matching is case-insensitive. If an exact repository key is not found, the loader also tries the repository name fallback.
+匹配时忽略大小写。如果完整仓库 key 没有命中，规则加载器还会尝试用仓库名回退匹配。
 
-## Rule Precedence
+## 规则优先级
 
-WeCom webhook URL resolution:
+企业微信 webhook URL 解析顺序：
 
 1. `repositories.<repo>.wecom_webhook_url`
-2. Existing environment-variable routing, such as `WECOM_WEBHOOK_URL_<PROJECT_OR_URL_SLUG>`
-3. Existing global `WECOM_WEBHOOK_URL`
+2. 现有环境变量路由，例如 `WECOM_WEBHOOK_URL_<PROJECT_OR_URL_SLUG>`
+3. 现有全局 `WECOM_WEBHOOK_URL`
 
-WeCom score threshold resolution:
+企业微信分数阈值解析顺序：
 
 1. `repositories.<repo>.wecom_score_threshold`
 2. `defaults.wecom_score_threshold`
-3. Existing global `WECOM_SCORE_THRESHOLD`
-4. No threshold filtering
+3. 现有全局 `WECOM_SCORE_THRESHOLD`
+4. 不按分数过滤
 
-Review skip regex resolution:
+跳过 Review 的正则解析顺序：
 
-1. `repositories.<repo>.review_skip_regex`, if present
-2. `defaults.review_skip_regex`
-3. No skip patterns
+1. 如果存在，使用 `repositories.<repo>.review_skip_regex`
+2. 使用 `defaults.review_skip_regex`
+3. 不配置跳过规则
 
-Repository-level skip regex replaces defaults instead of merging. This lets a repository opt into a narrower or broader skip policy without inheriting global patterns accidentally.
+仓库级 `review_skip_regex` 会替换默认规则，而不是与默认规则合并。这样单个仓库可以配置更宽或更窄的跳过策略，不会意外继承全局规则。
 
-## Review Skip Behavior
+## 跳过 Review 行为
 
-Before fetching large diffs or calling the LLM, each webhook handler builds a skip input:
+在获取大 diff 或调用 LLM 之前，每个 webhook handler 构造待匹配文本：
 
-- MR/PR events: title plus all commit messages.
-- Push events: all commit messages.
+- MR/PR 事件：标题加所有 commit message。
+- Push 事件：所有 commit message。
 
-If any configured regex matches the input, the handler logs the skip reason and returns before AI review. The service does not add platform notes and does not send review-result notifications for skipped reviews.
+如果任意配置的正则命中待匹配文本，handler 记录跳过原因并直接返回。被跳过的 Review 不调用 AI、不写平台 note、不发送 Review 结果通知。
 
-Invalid regex patterns are ignored with an error log so one bad pattern does not break webhook processing.
+无效正则会记录错误日志并被忽略，避免一个错误 pattern 阻断整个 webhook 处理流程。
 
-## Components
+## 组件设计
 
-Add `biz/utils/review_rules.py`, with responsibilities:
+新增 `biz/utils/review_rules.py`，职责如下：
 
-- Load `conf/review_rules.yml` lazily.
-- Normalize repository identity for matching.
-- Resolve repository-specific WeCom webhook URLs.
-- Resolve repository-specific WeCom score thresholds.
-- Evaluate skip regex patterns against title and commit messages.
+- 懒加载 `conf/review_rules.yml`。
+- 归一化仓库标识用于规则匹配。
+- 解析仓库级企业微信 webhook URL。
+- 解析仓库级企业微信分数阈值。
+- 基于标题和 commit message 判断是否跳过 Review。
 
-Update `biz/queue/worker.py`:
+更新 `biz/queue/worker.py`：
 
-- Extract repository identity per platform.
-- Run skip checks for MR/PR and push events before review.
-- Pass repository identity into notifications so WeCom can resolve repository-specific rules.
+- 为各平台事件提取仓库标识。
+- 在 MR/PR 和 Push Review 前执行跳过判断。
+- 将仓库标识传入通知链路，让企业微信能够解析仓库级规则。
 
-Update `biz/utils/im/wecom.py`:
+更新 `biz/utils/im/wecom.py`：
 
-- Ask the rule module for repository-level webhook URL and threshold first.
-- Preserve existing project/url slug/global environment fallbacks.
+- 优先向规则模块查询仓库级 webhook URL 和分数阈值。
+- 保留现有按项目名、URL slug 和全局环境变量的回退逻辑。
 
-Update docs:
+更新文档：
 
-- Add `REVIEW_RULES_CONFIG_PATH` to `.env.dist`, defaulting to `conf/review_rules.yml`.
-- Document the YAML format and examples in README and FAQ.
+- 在 `.env.dist` 增加 `REVIEW_RULES_CONFIG_PATH`，默认值为 `conf/review_rules.yml`。
+- 在 README 和 FAQ 中说明 YAML 格式和配置示例。
 
-## Error Handling
+## 错误处理
 
-- Missing `conf/review_rules.yml`: log at info level and use existing `.env` behavior.
-- Malformed YAML: log an error and use existing `.env` behavior.
-- Invalid threshold values: log an error and continue to fallback threshold.
-- Invalid regex: log an error and ignore that pattern.
-- Missing repository identity: use project name where available; otherwise only defaults apply.
+- `conf/review_rules.yml` 不存在：记录 info 日志，并使用现有 `.env` 行为。
+- YAML 格式错误：记录 error 日志，并使用现有 `.env` 行为。
+- 阈值配置非法：记录 error 日志，并继续使用下一级阈值。
+- 正则配置非法：记录 error 日志，并忽略该 pattern。
+- 仓库标识缺失：尽量使用项目名；仍取不到时只应用 defaults。
 
-## Testing
+## 测试
 
-Add focused tests for:
+新增聚焦测试，覆盖：
 
-- Repository matching by full name and name fallback.
-- WeCom webhook precedence.
-- Repository threshold overriding default and environment fallback.
-- Regex skip for MR/PR title plus commit messages.
-- Regex skip for push commit messages.
-- Invalid regex and missing config fallback behavior.
+- 通过完整仓库名和仓库名回退匹配规则。
+- 企业微信 webhook 的优先级。
+- 仓库级阈值覆盖默认阈值和环境变量阈值。
+- MR/PR 标题和 commit message 命中正则后跳过 Review。
+- Push commit message 命中正则后跳过 Review。
+- 无效正则和缺失配置文件时的回退行为。
 
-## Acceptance Criteria
+## 验收标准
 
-- A repository can send low-score WeCom alerts to its own robot.
-- Two repositories can use different WeCom score thresholds in the same deployment.
-- A configured regex such as `\\[skip review\\]` skips AI review when present in an MR/PR title or commit message.
-- Existing installations using only `.env` continue to behave as before.
+- 单个仓库可以把低分企业微信告警发送到自己的机器人。
+- 同一个部署中，两个仓库可以使用不同的企业微信分数阈值。
+- 配置 `\\[skip review\\]` 这类正则后，MR/PR 标题或 commit message 命中时会跳过 AI Review。
+- 只使用 `.env` 的现有部署保持原行为。
