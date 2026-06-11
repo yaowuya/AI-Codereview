@@ -53,6 +53,20 @@ DINGTALK_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token={access_t
 
 飞书和企业微信的配置方式类似。
 
+企业微信推荐使用 `conf/review_rules.yml` 做仓库级配置：
+
+```yaml
+repositories:
+  project-a:
+    wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=project-a"
+    wecom_score_threshold: 70
+  group/project-b:
+    wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=project-b"
+    wecom_score_threshold: 90
+```
+
+仓库 key 优先使用 GitHub/Gitea 的 `owner/repo` 或 GitLab 的 `namespace/project`。取不到完整名称时，也可以直接使用项目名。
+
 ### 如何让不同的Gitlab服务器的消息发送到不同的群？
 
 在项目的 .env 文件中，配置不同Gitlab服务器的群机器人的 Webhook 地址。
@@ -135,4 +149,22 @@ OLLAMA_API_BASE_URL=http://{宿主机/外网IP地址}:11434  # 正确
   ```
   GITHUB_ACCESS_TOKEN=your-access-token  #替换为你的Access Token
   ```
+
+### 如何跳过某些 MR/PR 或提交的 AI Review？
+
+在 `conf/review_rules.yml` 配置 `review_skip_regex`：
+
+```yaml
+defaults:
+  review_skip_regex:
+    - "\\[skip review\\]"
+
+repositories:
+  my-group/my-repo:
+    review_skip_regex:
+      - "^WIP:"
+      - "\\[no ai\\]"
+```
+
+MR/PR 事件会匹配标题和 commit message；Push 事件只匹配 commit message。仓库级 `review_skip_regex` 会替换默认规则。
 

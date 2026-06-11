@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from biz.llm.factory import Factory
 from biz.utils.log import logger
+from biz.utils.review_rules import ReviewRules
 
 # 指定环境变量文件路径
 ENV_FILE_PATH = "conf/.env"
@@ -78,6 +79,16 @@ def check_wecom_score_threshold():
     logger.info(f"WECOM_SCORE_THRESHOLD 已启用：仅当 Review 分数低于 {threshold} 时推送企业微信消息。")
 
 
+def check_review_rules_config():
+    """检查仓库级 Review 规则配置。"""
+    rules = ReviewRules()
+    config = rules.load_config()
+    if config:
+        logger.info(f"Review 规则配置已加载：{rules.config_path}")
+    else:
+        logger.info("Review 规则配置为空或未配置，将使用现有环境变量行为。")
+
+
 def check_llm_connectivity():
     client = Factory().getClient()
     logger.info(f"正在检查 LLM 供应商的连接...")
@@ -92,5 +103,6 @@ def check_config():
     check_env_vars()
     check_llm_provider()
     check_wecom_score_threshold()
+    check_review_rules_config()
     check_llm_connectivity()
     logger.info("配置项检查完成。")

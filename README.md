@@ -183,6 +183,24 @@ WECOM_SCORE_THRESHOLD=80
 
 配置后，仅当 AI Review 分数严格小于 `WECOM_SCORE_THRESHOLD` 时才会推送企业微信消息；留空则保持当前行为，仍然推送所有 Review 结果。该阈值仅作用于带 Review 分数的代码审查通知，不影响钉钉、飞书和其他类型通知。
 
+如果有多个仓库需要发往不同的企业微信机器人，或每个仓库需要不同的低分阈值，可以配置 `conf/review_rules.yml`：
+
+```yaml
+defaults:
+  wecom_score_threshold: 80
+  review_skip_regex:
+    - "\\[skip review\\]"
+
+repositories:
+  my-group/my-repo:
+    wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+    wecom_score_threshold: 70
+    review_skip_regex:
+      - "^WIP:"
+```
+
+仓库规则优先级高于 `.env`。`review_skip_regex` 会匹配 MR/PR 标题和 commit message；Push 事件只匹配 commit message。命中后不会调用 AI Review，也不会写平台 note 或发送 Review 结果通知。
+
 ## 常见问题
 
 **1.如何对整个代码库进行Review?**

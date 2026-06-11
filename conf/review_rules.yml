@@ -1,0 +1,13 @@
+# 仓库级 Review 规则配置。
+# 默认不启用任何仓库级规则；需要时取消注释并按实际仓库修改。
+defaults:
+  # wecom_score_threshold: 80
+  review_skip_regex: []
+
+repositories:
+  # my-group/my-repo:
+  #   wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+  #   wecom_score_threshold: 70
+  #   review_skip_regex:
+  #     - "\\[skip review\\]"
+  #     - "^WIP:"
