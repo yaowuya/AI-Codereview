@@ -494,7 +494,15 @@ class TestSkipReviewRules(WebhookTestBase):
     # ---------- auto-ops.yaml 仓库级规则：^chore: ----------
 
     def test_repo_level_skip_regex_chore(self):
-        """auto-ops 仓库 + commit message 以 'chore:' 开头 → 命中仓库级规则，跳过。"""
+        """auto-ops 仓库级规则 ^chore: → 跳过（使用独立临时规则目录，不依赖真实文件内容）。"""
+        import shutil, tempfile
+        tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir)
+        with open(os.path.join(tmpdir, "auto-ops.yaml"), "w") as f:
+            f.write(f'repository: "{REPO_AUTO_OPS}"\nreview_skip_regex:\n  - "^chore:"\n  - "\\\\[skip review\\\\]"\n')
+        with open(os.path.join(tmpdir, "default.yaml"), "w") as f:
+            f.write('review_skip_regex:\n  - "\\\\[skip review\\\\]"\n')
+
         parts = REPO_AUTO_OPS.split("/")
         ns, name = "/".join(parts[:-1]), parts[-1]
         payload = gitlab_mr_payload(
@@ -502,7 +510,7 @@ class TestSkipReviewRules(WebhookTestBase):
             title="chore: update ci",
             commit_messages=("chore: bump version",),
         )
-        with self.sync_queue():
+        with self.sync_queue(), patch.dict(os.environ, {"REVIEW_RULES_CONFIG_DIR": tmpdir}, clear=False):
             patchers = self.mock_gitlab_mr_handler(
                 commits=[{"id": "abc", "message": "chore: bump version"}]
             )
@@ -513,6 +521,14 @@ class TestSkipReviewRules(WebhookTestBase):
 
     def test_repo_level_skip_does_not_affect_other_repo(self):
         """auto-ops 的 ^chore: 规则不影响 unknown-project（继承 default，无 ^chore: 规则）。"""
+        import shutil, tempfile
+        tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir)
+        with open(os.path.join(tmpdir, "auto-ops.yaml"), "w") as f:
+            f.write(f'repository: "{REPO_AUTO_OPS}"\nreview_skip_regex:\n  - "^chore:"\n')
+        with open(os.path.join(tmpdir, "default.yaml"), "w") as f:
+            f.write('review_skip_regex:\n  - "\\\\[skip review\\\\]"\n')
+
         ns, name = REPO_UNKNOWN.split("/", 1)
         commits = [{"id": "abc", "message": "chore: cleanup"}]
         payload = gitlab_mr_payload(
@@ -520,7 +536,7 @@ class TestSkipReviewRules(WebhookTestBase):
             title="chore: cleanup",
             commit_messages=("chore: cleanup",),
         )
-        with self.sync_queue():
+        with self.sync_queue(), patch.dict(os.environ, {"REVIEW_RULES_CONFIG_DIR": tmpdir}, clear=False):
             patchers = self.mock_gitlab_mr_handler(commits=commits)
             self.start_all(*patchers)
             self.client.post("/review/webhook", json=payload, headers=self.headers_gitlab)
@@ -531,7 +547,15 @@ class TestSkipReviewRules(WebhookTestBase):
     # ---------- cw-auto-ops.yaml 仓库级规则：^WIP: ----------
 
     def test_repo_level_skip_wip_prefix(self):
-        """cw-auto-ops 仓库 + MR 标题以 WIP: 开头 → 跳过。"""
+        """cw-auto-ops 仓库级规则 ^WIP: → 跳过（使用独立临时规则目录）。"""
+        import shutil, tempfile
+        tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir)
+        with open(os.path.join(tmpdir, "cw-auto-ops.yaml"), "w") as f:
+            f.write(f'repository: "{REPO_CW_AUTO_OPS}"\nreview_skip_regex:\n  - "^WIP:"\n  - "\\\\[skip review\\\\]"\n')
+        with open(os.path.join(tmpdir, "default.yaml"), "w") as f:
+            f.write('review_skip_regex:\n  - "\\\\[skip review\\\\]"\n')
+
         parts = REPO_CW_AUTO_OPS.split("/")
         ns, name = "/".join(parts[:-1]), parts[-1]
         payload = gitlab_mr_payload(
@@ -539,7 +563,7 @@ class TestSkipReviewRules(WebhookTestBase):
             title="WIP: draft implementation",
             commit_messages=("WIP: work in progress",),
         )
-        with self.sync_queue():
+        with self.sync_queue(), patch.dict(os.environ, {"REVIEW_RULES_CONFIG_DIR": tmpdir}, clear=False):
             patchers = self.mock_gitlab_mr_handler(
                 commits=[{"id": "abc", "message": "WIP: work in progress"}]
             )

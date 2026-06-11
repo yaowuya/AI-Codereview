@@ -45,9 +45,14 @@ class WeComNotifier:
         :return: Webhook URL
         :raises ValueError: 如果未找到 Webhook URL
         """
+        logger.info(f"[WeCom] _get_webhook_url called: project_name={project_name!r}, repository_full_name={repository_full_name!r}")
+
         # 优先使用仓库规则中配置的 Webhook URL
-        rules_webhook_url = ReviewRules().get_wecom_webhook_url(repository_full_name=repository_full_name,
-                                                                project_name=project_name)
+        rules = ReviewRules()
+        logger.info(f"[WeCom] ReviewRules config_dir={rules.config_dir!r}, use_dir_mode={rules._use_dir_mode()}")
+        rules_webhook_url = rules.get_wecom_webhook_url(repository_full_name=repository_full_name,
+                                                        project_name=project_name)
+        logger.info(f"[WeCom] rules_webhook_url={rules_webhook_url!r}")
         if rules_webhook_url:
             return rules_webhook_url
 

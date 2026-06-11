@@ -33,6 +33,8 @@ def _should_skip_review(repository_full_name=None, project_name=None, title=None
 
 def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gitlab_url_slug: str):
     push_review_enabled = os.environ.get('PUSH_REVIEW_ENABLED', '0') == '1'
+    repository_full_name = None
+    project_name = None
     try:
         handler = PushHandler(webhook_data, gitlab_token, gitlab_url)
         logger.info('Push Hook event received')
@@ -87,7 +89,8 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
 
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
-        notifier.send_notification(content=error_message)
+        notifier.send_notification(content=error_message, project_name=project_name,
+                                   repository_full_name=repository_full_name)
         logger.error('出现未知错误: %s', error_message)
 
 
@@ -101,6 +104,8 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
     :return:
     '''
     merge_review_only_protected_branches = os.environ.get('MERGE_REVIEW_ONLY_PROTECTED_BRANCHES_ENABLED', '0') == '1'
+    repository_full_name = None
+    mr_project_name = None
     try:
         # 解析Webhook数据
         handler = MergeRequestHandler(webhook_data, gitlab_token, gitlab_url)
@@ -193,11 +198,14 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
 
     except Exception as e:
         error_message = f'AI Code Review 服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
-        notifier.send_notification(content=error_message)
+        notifier.send_notification(content=error_message, project_name=mr_project_name,
+                                   repository_full_name=repository_full_name)
         logger.error('出现未知错误: %s', error_message)
 
 def handle_github_push_event(webhook_data: dict, github_token: str, github_url: str, github_url_slug: str):
     push_review_enabled = os.environ.get('PUSH_REVIEW_ENABLED', '0') == '1'
+    repository_full_name = None
+    project_name = None
     try:
         handler = GithubPushHandler(webhook_data, github_token, github_url)
         logger.info('GitHub Push event received')
@@ -252,7 +260,8 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
 
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
-        notifier.send_notification(content=error_message)
+        notifier.send_notification(content=error_message, project_name=project_name,
+                                   repository_full_name=repository_full_name)
         logger.error('出现未知错误: %s', error_message)
 
 
@@ -266,6 +275,8 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
     :return:
     '''
     merge_review_only_protected_branches = os.environ.get('MERGE_REVIEW_ONLY_PROTECTED_BRANCHES_ENABLED', '0') == '1'
+    repository_full_name = None
+    gh_project_name = None
     try:
         # 解析Webhook数据
         handler = GithubPullRequestHandler(webhook_data, github_token, github_url)
@@ -347,12 +358,15 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
 
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
-        notifier.send_notification(content=error_message)
+        notifier.send_notification(content=error_message, project_name=gh_project_name,
+                                   repository_full_name=repository_full_name)
         logger.error('出现未知错误: %s', error_message)
 
 
 def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str, gitea_url_slug: str):
     push_review_enabled = os.environ.get('PUSH_REVIEW_ENABLED', '0') == '1'
+    repository_full_name = None
+    project_name = None
     try:
         handler = GiteaPushHandler(webhook_data, gitea_token, gitea_url)
         logger.info('Gitea Push event received')
@@ -408,12 +422,15 @@ def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str
 
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
-        notifier.send_notification(content=error_message)
+        notifier.send_notification(content=error_message, project_name=project_name,
+                                   repository_full_name=repository_full_name)
         logger.error('出现未知错误: %s', error_message)
 
 
 def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_url: str, gitea_url_slug: str):
     merge_review_only_protected_branches = os.environ.get('MERGE_REVIEW_ONLY_PROTECTED_BRANCHES_ENABLED', '0') == '1'
+    repository_full_name = None
+    gitea_project_name = None
     try:
         handler = GiteaPullRequestHandler(webhook_data, gitea_token, gitea_url)
         logger.info('Gitea Pull Request event received')
@@ -496,5 +513,6 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
 
     except Exception as e:
         error_message = f'AI Code Review 服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
-        notifier.send_notification(content=error_message)
+        notifier.send_notification(content=error_message, project_name=gitea_project_name,
+                                   repository_full_name=repository_full_name)
         logger.error('出现未知错误: %s', error_message)

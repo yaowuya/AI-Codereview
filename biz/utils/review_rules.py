@@ -188,6 +188,7 @@ class ReviewRules:
     ) -> dict:
         self._ensure_loaded()
         repo_rules = self._repo_rules or {}
+        logger.info(f"[ReviewRules] get_repository_rule: full_name={repository_full_name!r}, project_name={project_name!r}, loaded_keys={list(repo_rules.keys())}")
 
         candidates = [
             repository_full_name,
@@ -197,7 +198,9 @@ class ReviewRules:
         for candidate in candidates:
             key = self.normalize_repository_key(candidate)
             if key and key in repo_rules:
+                logger.info(f"[ReviewRules] matched key={key!r}")
                 return repo_rules[key]
+        logger.info(f"[ReviewRules] no match found for candidates={[self.normalize_repository_key(c) for c in candidates]}")
         return {}
 
     @staticmethod
