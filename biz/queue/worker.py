@@ -12,6 +12,22 @@ from biz.service.review_service import ReviewService
 from biz.utils.code_reviewer import CodeReviewer
 from biz.utils.im import notifier
 from biz.utils.log import logger
+from biz.utils.review_rules import ReviewRules
+
+
+def _should_skip_review(repository_full_name=None, project_name=None, title=None, commits=None) -> bool:
+    result = ReviewRules().should_skip_review(
+        repository_full_name=repository_full_name,
+        project_name=project_name,
+        title=title,
+        commits=commits,
+    )
+    if result.should_skip:
+        logger.info(
+            f"Review skipped by regex pattern '{result.pattern}' for repository '{repository_full_name or project_name}'."
+        )
+        return True
+    return False
 
 
 
@@ -23,6 +39,12 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
         commits = handler.get_push_commits()
         if not commits:
             logger.error('Failed to get commits')
+            return
+
+        project = webhook_data.get('project', {})
+        project_name = project.get('name')
+        repository_full_name = project.get('path_with_namespace') or project_name
+        if _should_skip_review(repository_full_name=repository_full_name, project_name=project_name, commits=commits):
             return
 
         review_result = None
@@ -60,6 +82,7 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
             webhook_data=webhook_data,
             additions=additions,
             deletions=deletions,
+            repository_full_name=repository_full_name,
         ))
 
     except Exception as e:
@@ -112,6 +135,19 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
                 logger.info(f"Merge Request with last_commit_id {last_commit_id} already exists, skipping review for {project_name}.")
                 return
 
+        # 提取仓库完整名称，并在昂贵操作前检查跳过规则
+        project = webhook_data.get('project', {})
+        mr_project_name = project.get('name')
+        repository_full_name = project.get('path_with_namespace') or mr_project_name
+        title = object_attributes.get('title')
+        commits = handler.get_merge_request_commits()
+        if not commits:
+            logger.error('Failed to get commits')
+            return
+        if _should_skip_review(repository_full_name=repository_full_name, project_name=mr_project_name,
+                               title=title, commits=commits):
+            return
+
         # 仅仅在MR创建或更新时进行Code Review
         # 获取Merge Request的changes
         changes = handler.get_merge_request_changes()
@@ -126,12 +162,6 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
         for item in changes:
             additions += item.get('additions', 0)
             deletions += item.get('deletions', 0)
-
-        # 获取Merge Request的commits
-        commits = handler.get_merge_request_commits()
-        if not commits:
-            logger.error('Failed to get commits')
-            return
 
         # review 代码
         commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
@@ -157,6 +187,7 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
                 additions=additions,
                 deletions=deletions,
                 last_commit_id=last_commit_id,
+                repository_full_name=repository_full_name,
             )
         )
 
@@ -173,6 +204,12 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
         commits = handler.get_push_commits()
         if not commits:
             logger.error('Failed to get commits')
+            return
+
+        repository = webhook_data.get('repository', {})
+        project_name = repository.get('name')
+        repository_full_name = repository.get('full_name') or project_name
+        if _should_skip_review(repository_full_name=repository_full_name, project_name=project_name, commits=commits):
             return
 
         review_result = None
@@ -210,6 +247,7 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
             webhook_data=webhook_data,
             additions=additions,
             deletions=deletions,
+            repository_full_name=repository_full_name,
         ))
 
     except Exception as e:
@@ -252,6 +290,19 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
                 logger.info(f"Pull Request with last_commit_id {github_last_commit_id} already exists, skipping review for {project_name}.")
                 return
 
+        # 提取仓库完整名称，并在昂贵操作前检查跳过规则
+        repository = webhook_data.get('repository', {})
+        gh_project_name = repository.get('name')
+        repository_full_name = repository.get('full_name') or gh_project_name
+        title = webhook_data.get('pull_request', {}).get('title')
+        commits = handler.get_pull_request_commits()
+        if not commits:
+            logger.error('Failed to get commits')
+            return
+        if _should_skip_review(repository_full_name=repository_full_name, project_name=gh_project_name,
+                               title=title, commits=commits):
+            return
+
         # 仅仅在PR创建或更新时进行Code Review
         # 获取Pull Request的changes
         changes = handler.get_pull_request_changes()
@@ -266,12 +317,6 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
         for item in changes:
             additions += item.get('additions', 0)
             deletions += item.get('deletions', 0)
-
-        # 获取Pull Request的commits
-        commits = handler.get_pull_request_commits()
-        if not commits:
-            logger.error('Failed to get commits')
-            return
 
         # review 代码
         commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
@@ -297,6 +342,7 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
                 additions=additions,
                 deletions=deletions,
                 last_commit_id=github_last_commit_id,
+                repository_full_name=repository_full_name,
             ))
 
     except Exception as e:
@@ -313,6 +359,12 @@ def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str
         commits = handler.get_push_commits()
         if not commits:
             logger.error('Failed to get commits')
+            return
+
+        repository = webhook_data.get('repository', {})
+        project_name = repository.get('name')
+        repository_full_name = repository.get('full_name') or project_name
+        if _should_skip_review(repository_full_name=repository_full_name, project_name=project_name, commits=commits):
             return
 
         review_result = None
@@ -351,6 +403,7 @@ def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str
             webhook_data=webhook_data,
             additions=additions,
             deletions=deletions,
+            repository_full_name=repository_full_name,
         ))
 
     except Exception as e:
@@ -388,6 +441,19 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
                 logger.info(f"Pull Request with last_commit_id {last_commit_id} already exists, skipping review for {project_name}.")
                 return
 
+        # 提取仓库完整名称，并在昂贵操作前检查跳过规则
+        gitea_repository = webhook_data.get('repository', {})
+        gitea_project_name = gitea_repository.get('name')
+        repository_full_name = gitea_repository.get('full_name') or gitea_project_name
+        title = pull_request.get('title')
+        commits = handler.get_pull_request_commits()
+        if not commits:
+            logger.error('Failed to get commits for Gitea pull request')
+            return
+        if _should_skip_review(repository_full_name=repository_full_name, project_name=gitea_project_name,
+                               title=title, commits=commits):
+            return
+
         changes = handler.get_pull_request_changes()
         logger.info('changes: %s', changes)
         changes = filter_gitea_changes(changes)
@@ -400,11 +466,6 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
         for item in changes:
             additions += item.get('additions', 0)
             deletions += item.get('deletions', 0)
-
-        commits = handler.get_pull_request_commits()
-        if not commits:
-            logger.error('Failed to get commits for Gitea pull request')
-            return
 
         commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
         review_result = CodeReviewer().review_and_strip_code(str(changes), commits_text)
@@ -430,6 +491,7 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
                 additions=additions,
                 deletions=deletions,
                 last_commit_id=last_commit_id,
+                repository_full_name=repository_full_name,
             ))
 
     except Exception as e:
