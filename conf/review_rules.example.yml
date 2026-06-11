@@ -1,0 +1,75 @@
+# =============================================================================
+# 仓库级 Review 规则示例配置（多仓库场景）
+#
+# 文件路径通过环境变量 REVIEW_RULES_CONFIG_PATH 指定，默认为 conf/review_rules.yml
+#
+# 仓库 key 匹配优先级（不区分大小写）：
+#   1. full_name  —— GitLab: namespace/project，GitHub/Gitea: owner/repo
+#   2. project_name —— 仅项目名，取不到 full_name 时的兜底
+#
+# 各字段优先级：
+#   wecom_webhook_url  : repositories.<repo> > 环境变量 WECOM_WEBHOOK_URL_<PROJECT>
+#   wecom_score_threshold: repositories.<repo> > defaults > 环境变量 WECOM_SCORE_THRESHOLD
+#   review_skip_regex  : repositories.<repo>（有则覆盖 defaults，无则继承 defaults）
+# =============================================================================
+
+# ------------------------------------------------------------------------------
+# 全局默认值：对所有未单独配置的仓库生效
+# ------------------------------------------------------------------------------
+defaults:
+  # 默认评分阈值：Review 分数严格低于此值才推送企业微信；留空则始终推送
+  wecom_score_threshold: 80
+
+  # 默认跳过规则：匹配 MR/PR 标题或任意 commit message 时跳过 AI Review
+  # 注意：YAML 中正则的反斜杠需要双写（\\[ 表示字面量 \[）
+  review_skip_regex:
+    - "\\[skip review\\]"   # 标题或提交信息含 [skip review]
+    - "\\[no review\\]"     # 标题或提交信息含 [no review]
+    - "^Revert "            # revert 提交自动跳过
+
+# ------------------------------------------------------------------------------
+# 各仓库独立规则
+# key 格式：namespace/project（GitLab）或 owner/repo（GitHub/Gitea）
+# 也可只写项目名，适用于取不到 full_name 的场景
+# ------------------------------------------------------------------------------
+repositories:
+
+  # ---------- 核心后端服务：严格审查，专属机器人 ----------
+  backend-team/core-api:
+    wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb"
+    wecom_score_threshold: 70        # 比默认更严格，低于 70 分才推送
+    review_skip_regex:
+      - "^chore:"                    # 常规杂务提交不审查
+      - "\\[skip review\\]"          # 继续保留通用跳过标记
+
+  # ---------- 前端项目：宽松阈值，独立通知群 ----------
+  frontend-team/web-app:
+    wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=cccccccc-4444-5555-6666-dddddddddddd"
+    wecom_score_threshold: 60        # 前端团队阈值较宽松
+    review_skip_regex:
+      - "^WIP:"                      # WIP 提交直接跳过
+      - "^docs:"                     # 纯文档变更跳过
+      - "\\[skip review\\]"
+
+  # ---------- 基础设施仓库：只看高风险改动，阈值极低 ----------
+  infra-team/k8s-configs:
+    wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=eeeeeeee-7777-8888-9999-ffffffffffff"
+    wecom_score_threshold: 50        # 只推送较低分（风险较高）的改动
+    review_skip_regex:
+      - "^bump version"
+      - "^auto-generated"
+      - "\\[skip review\\]"
+
+  # ---------- 数据仓库：不推送企业微信，但仍执行 AI Review ----------
+  data-team/etl-pipelines:
+    # 未配置 wecom_webhook_url，将回退到环境变量 WECOM_WEBHOOK_URL
+    wecom_score_threshold: 75
+    review_skip_regex:
+      - "^auto commit"
+      - "\\[skip review\\]"
+
+  # ---------- 实验性项目：完全跳过 AI Review ----------
+  sandbox/experiments:
+    # 未配置 wecom_webhook_url 和 wecom_score_threshold，均使用 defaults/环境变量
+    review_skip_regex:
+      - ".*"                         # 匹配所有提交，整个仓库跳过 Review
