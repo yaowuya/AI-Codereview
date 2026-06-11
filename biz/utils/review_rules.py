@@ -118,13 +118,16 @@ class ReviewRules:
                 )
                 continue
 
-            normalized = self.normalize_repository_key(repo_key)
-            if normalized in self._repo_rules:
-                logger.warning(
-                    f"Review rules: duplicate repository key '{repo_key}' in {filepath}, overwriting."
-                )
-            self._repo_rules[normalized] = data
-            logger.info(f"Review rules: loaded repository '{repo_key}' from {filepath}")
+            # 支持逗号分隔多个仓库，每个 key 都指向同一份规则
+            repo_keys = [k.strip() for k in str(repo_key).split(",") if k.strip()]
+            for key in repo_keys:
+                normalized = self.normalize_repository_key(key)
+                if normalized in self._repo_rules:
+                    logger.warning(
+                        f"Review rules: duplicate repository key '{key}' in {filepath}, overwriting."
+                    )
+                self._repo_rules[normalized] = data
+            logger.info(f"Review rules: loaded repository {repo_keys} from {filepath}")
 
     def _load_single_file_mode(self):
         """加载旧版单文件格式（defaults: + repositories: 两段）。"""
