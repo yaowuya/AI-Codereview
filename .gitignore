@@ -10,7 +10,14 @@ data/*
 !data/.gitkeep
 
 conf/.env
+conf/review_rule/*.yaml
+conf/review_rule/*.yml
+!conf/review_rule/default.yaml
+!conf/review_rule/default.yml
 .pyc
 __pycache__/
 .cursorignore
 .cursor
+.claude
+CLAUDE.md
+.mcp.json
