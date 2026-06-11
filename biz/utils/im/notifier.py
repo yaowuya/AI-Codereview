@@ -5,7 +5,7 @@ from biz.utils.im.wecom import WeComNotifier
 
 
 def send_notification(content, msg_type='text', title="通知", is_at_all=False, project_name=None, url_slug=None,
-                      webhook_data: dict={}, score=None):
+                      webhook_data: dict={}, score=None, repository_full_name=None):
     """
     发送通知消息到配置的平台(钉钉和企业微信)
     :param content: 消息内容
@@ -24,7 +24,8 @@ def send_notification(content, msg_type='text', title="通知", is_at_all=False,
     # 企业微信推送
     wecom_notifier = WeComNotifier()
     wecom_notifier.send_message(content=content, msg_type=msg_type, title=title, is_at_all=is_at_all,
-                                project_name=project_name, url_slug=url_slug, score=score)
+                                project_name=project_name, url_slug=url_slug, score=score,
+                                repository_full_name=repository_full_name)
 
     # 飞书推送
     feishu_notifier = FeishuNotifier()
@@ -39,6 +40,7 @@ def send_notification(content, msg_type='text', title="通知", is_at_all=False,
         "title": title,
         "is_at_all": is_at_all,
         "project_name": project_name,
-        "url_slug": url_slug
+        "url_slug": url_slug,
+        "repository_full_name": repository_full_name
     }
     extra_webhook_notifier.send_message(system_data=system_data, webhook_data=webhook_data)

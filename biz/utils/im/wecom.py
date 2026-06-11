@@ -5,6 +5,7 @@ import re
 import requests
 
 from biz.utils.log import logger
+from biz.utils.review_rules import ReviewRules
 
 
 class WeComNotifier:
@@ -17,30 +18,16 @@ class WeComNotifier:
         self.enabled = os.environ.get('WECOM_ENABLED', '0') == '1'
 
     @staticmethod
-    def _get_score_threshold():
-        """读取企业微信 Review 推送阈值，未配置时返回 None。"""
-        threshold_text = os.environ.get('WECOM_SCORE_THRESHOLD')
-        if threshold_text is None:
-            return None
-
-        threshold_text = threshold_text.strip()
-        if not threshold_text:
-            return None
-
-        try:
-            threshold = int(threshold_text)
-        except ValueError as exc:
-            raise ValueError("环境变量 WECOM_SCORE_THRESHOLD 必须是非负整数。") from exc
-
-        if threshold < 0:
-            raise ValueError("环境变量 WECOM_SCORE_THRESHOLD 必须是非负整数。")
-
+    def _get_score_threshold(project_name=None, repository_full_name=None):
+        """读取企业微信 Review 推送阈值，优先使用仓库规则，未配置时返回 None。"""
+        threshold = ReviewRules().get_wecom_score_threshold(repository_full_name=repository_full_name,
+                                                            project_name=project_name)
         return threshold
 
-    def _should_send_by_score(self, score=None):
+    def _should_send_by_score(self, score=None, project_name=None, repository_full_name=None):
         """仅在配置阈值且提供 Review 分数时，按分数决定是否发送企业微信消息。"""
-        threshold = self._get_score_threshold()
-        logger.info(f"评分阈值：{threshold}，当前评分：{score}，对比结果：{score < threshold}")
+        threshold = self._get_score_threshold(project_name=project_name, repository_full_name=repository_full_name)
+        logger.info(f"评分阈值：{threshold}，当前评分：{score}，对比结果：{score < threshold if threshold is not None and score is not None else '未启用'}")
         if threshold is None or score is None:
             return True
 
@@ -50,13 +37,20 @@ class WeComNotifier:
         logger.info(f"Review 分数 {score} 未低于企微阈值 {threshold}，跳过企业微信推送。")
         return False
 
-    def _get_webhook_url(self, project_name=None, url_slug=None):
+    def _get_webhook_url(self, project_name=None, url_slug=None, repository_full_name=None):
         """
         获取项目对应的 Webhook URL
         :param project_name: 项目名称
+        :param repository_full_name: 仓库完整名称（如 group/project）
         :return: Webhook URL
         :raises ValueError: 如果未找到 Webhook URL
         """
+        # 优先使用仓库规则中配置的 Webhook URL
+        rules_webhook_url = ReviewRules().get_wecom_webhook_url(repository_full_name=repository_full_name,
+                                                                project_name=project_name)
+        if rules_webhook_url:
+            return rules_webhook_url
+
         # 如果未提供 project_name，直接返回默认的 Webhook URL
         if not project_name:
             if self.default_webhook_url:
@@ -103,7 +97,7 @@ class WeComNotifier:
         return formatted_content
 
     def send_message(self, content, msg_type='text', title=None, is_at_all=False, project_name=None,
-                     url_slug=None, score=None):
+                     url_slug=None, score=None, repository_full_name=None):
         """
         发送企业微信消息
         :param content: 消息内容
@@ -113,16 +107,18 @@ class WeComNotifier:
         :param project_name: 关联项目名称
         :param url_slug: GitLab URL Slug
         :param score: Review 评分，配置 WECOM_SCORE_THRESHOLD 时用于决定是否发送
+        :param repository_full_name: 仓库完整名称（如 group/project）
         """
         if not self.enabled:
             logger.info("企业微信推送未启用")
             return
         logger.info(f"评分：{score}")
         try:
-            if not self._should_send_by_score(score):
+            if not self._should_send_by_score(score, project_name=project_name, repository_full_name=repository_full_name):
                 return
 
-            post_url = self._get_webhook_url(project_name=project_name, url_slug=url_slug)
+            post_url = self._get_webhook_url(project_name=project_name, url_slug=url_slug,
+                                             repository_full_name=repository_full_name)
             # 企业微信消息内容最大长度限制
             # text类型最大2048字节
             # https://developer.work.weixin.qq.com/document/path/91770#%E6%96%87%E6%9C%AC%E7%B1%BB%E5%9E%8B
