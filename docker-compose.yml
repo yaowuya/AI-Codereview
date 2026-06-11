@@ -11,6 +11,7 @@ services:
     volumes:
       - /home/ai-codereview/data:/app/data
       - /home/ai-codereview/log:/app/log
+      - /home/ai-codereview/conf/review_rule:/app/conf/review_rule
     env_file:
       - ./conf/.env
     restart: unless-stopped
