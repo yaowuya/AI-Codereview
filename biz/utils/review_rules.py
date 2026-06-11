@@ -268,6 +268,27 @@ class ReviewRules:
                 messages.append(str(message))
         return messages
 
+    def get_code_review_prompt(
+        self,
+        repository_full_name: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> Optional[dict]:
+        """
+        获取仓库级 code_review_prompt（system_prompt + user_prompt）。
+        优先级：仓库规则 > default.yaml > None（调用方回退到 conf/prompt_templates.yml）
+        返回含 system_prompt / user_prompt 两个 key 的 dict，或 None。
+        """
+        rule = self.get_repository_rule(repository_full_name, project_name)
+        prompt = rule.get("code_review_prompt")
+        if prompt and isinstance(prompt, dict):
+            return prompt
+
+        prompt = self.get_default_rule().get("code_review_prompt")
+        if prompt and isinstance(prompt, dict):
+            return prompt
+
+        return None
+
     def get_review_skip_regex(
         self,
         repository_full_name: Optional[str] = None,

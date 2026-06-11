@@ -1,42 +1,76 @@
 import abc
 import os
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 import yaml
 from jinja2 import Template
 
 from biz.llm.factory import Factory
 from biz.utils.log import logger
+from biz.utils.review_rules import ReviewRules
 from biz.utils.token_util import count_tokens, truncate_text_by_tokens
 
 
 class BaseReviewer(abc.ABC):
     """代码审查基类"""
 
-    def __init__(self, prompt_key: str):
+    def __init__(self, prompt_key: str,
+                 repository_full_name: Optional[str] = None,
+                 project_name: Optional[str] = None):
         self.client = Factory().getClient()
-        self.prompts = self._load_prompts(prompt_key, os.getenv("REVIEW_STYLE", "professional"))
+        style = os.getenv("REVIEW_STYLE", "professional")
+        self.prompts = self._load_prompts(
+            prompt_key, style,
+            repository_full_name=repository_full_name,
+            project_name=project_name,
+        )
 
-    def _load_prompts(self, prompt_key: str, style="professional") -> Dict[str, Any]:
-        """加载提示词配置"""
+    def _load_prompts(self, prompt_key: str, style: str = "professional",
+                      repository_full_name: Optional[str] = None,
+                      project_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        加载提示词配置，优先级：
+          1. ReviewRules 仓库规则 / default.yaml 中的 code_review_prompt
+          2. conf/prompt_templates.yml（兜底）
+        """
+        def render(template_str: str) -> str:
+            return Template(template_str).render(style=style)
+
+        # --- 优先从 ReviewRules 目录模式加载 ---
+        if prompt_key == "code_review_prompt":
+            rules_prompt = ReviewRules().get_code_review_prompt(
+                repository_full_name=repository_full_name,
+                project_name=project_name,
+            )
+            if rules_prompt:
+                try:
+                    return {
+                        "system_message": {
+                            "role": "system",
+                            "content": render(rules_prompt["system_prompt"]),
+                        },
+                        "user_message": {
+                            "role": "user",
+                            "content": render(rules_prompt["user_prompt"]),
+                        },
+                    }
+                except KeyError as e:
+                    logger.warning(
+                        f"[ReviewRules] code_review_prompt missing key {e} for "
+                        f"repo={repository_full_name!r}, falling back to prompt_templates.yml"
+                    )
+
+        # --- 兜底：conf/prompt_templates.yml ---
         prompt_templates_file = "conf/prompt_templates.yml"
         try:
-            # 在打开 YAML 文件时显式指定编码为 UTF-8，避免使用系统默认的 GBK 编码。
             with open(prompt_templates_file, "r", encoding="utf-8") as file:
                 prompts = yaml.safe_load(file).get(prompt_key, {})
 
-                # 使用Jinja2渲染模板
-                def render_template(template_str: str) -> str:
-                    return Template(template_str).render(style=style)
-
-                system_prompt = render_template(prompts["system_prompt"])
-                user_prompt = render_template(prompts["user_prompt"])
-
-                return {
-                    "system_message": {"role": "system", "content": system_prompt},
-                    "user_message": {"role": "user", "content": user_prompt},
-                }
+            return {
+                "system_message": {"role": "system", "content": render(prompts["system_prompt"])},
+                "user_message": {"role": "user", "content": render(prompts["user_prompt"])},
+            }
         except (FileNotFoundError, KeyError, yaml.YAMLError) as e:
             logger.error(f"加载提示词配置失败: {e}")
             raise Exception(f"提示词配置加载失败: {e}")
@@ -57,8 +91,14 @@ class BaseReviewer(abc.ABC):
 class CodeReviewer(BaseReviewer):
     """代码 Diff 级别的审查"""
 
-    def __init__(self):
-        super().__init__("code_review_prompt")
+    def __init__(self,
+                 repository_full_name: Optional[str] = None,
+                 project_name: Optional[str] = None):
+        super().__init__(
+            "code_review_prompt",
+            repository_full_name=repository_full_name,
+            project_name=project_name,
+        )
 
     def review_and_strip_code(self, changes_text: str, commits_text: str = "") -> str:
         """
@@ -105,4 +145,3 @@ class CodeReviewer(BaseReviewer):
             return 0
         match = re.search(r"总分[:：]\s*(\d+)分?", review_text)
         return int(match.group(1)) if match else 0
-
