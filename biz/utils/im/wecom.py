@@ -84,20 +84,17 @@ class WeComNotifier:
 
     def format_markdown_content(self, content, title=None):
         """
-        格式化markdown内容以适配企业微信
+        对企业微信不支持的 markdown 语法做降级处理：
+        - 5 级及以上标题降为 4 级（企微最深支持 ####）
+        - 去除 HTML 标签（企微只支持 <font color="...">）
+        - 标题前缀追加（当 title 单独传入时）
+        不再删除链接格式，企微原生支持 [text](url)。
         """
-        # 处理标题
-        formatted_content = f"## {title}\n\n" if title else ""
-
-        # 将内容中的5级以上标题转为4级
+        formatted_content = f"# {title}\n\n" if title else ""
+        # 5 级及以上标题 → 4 级
         content = re.sub(r'#{5,}\s', '#### ', content)
-
-        # 处理链接格式
-        content = re.sub(r'\[(.*?)\]\((.*?)\)', r'[链接]\2', content)
-
-        # 移除HTML标签
-        content = re.sub(r'<[^>]+>', '', content)
-
+        # 去除不支持的 HTML 标签（保留 <font color="...">）
+        content = re.sub(r'<(?!/?font\b)[^>]+>', '', content)
         formatted_content += content
         return formatted_content
 
