@@ -82,11 +82,19 @@ def check_wecom_score_threshold():
 def check_review_rules_config():
     """检查仓库级 Review 规则配置。"""
     rules = ReviewRules()
-    config = rules.load_config()
-    if config:
-        logger.info(f"Review 规则配置已加载：{rules.config_path}")
+    if rules._use_dir_mode():
+        rules._ensure_loaded()
+        repo_count = len(rules._repo_rules or {})
+        logger.info(
+            f"Review 规则配置已加载（目录模式）：{rules.config_dir}，"
+            f"共 {repo_count} 个仓库规则，default.yaml {'已' if rules._default_rule else '未'}配置。"
+        )
     else:
-        logger.info("Review 规则配置为空或未配置，将使用现有环境变量行为。")
+        config = rules.load_config()
+        if config:
+            logger.info(f"Review 规则配置已加载（单文件模式）：{rules.config_path}")
+        else:
+            logger.info("Review 规则配置为空或未配置，将使用现有环境变量行为。")
 
 
 def check_llm_connectivity():

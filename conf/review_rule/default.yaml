@@ -1,0 +1,12 @@
+# 全局默认值，对所有未单独配置的仓库生效。
+# 字段与仓库规则文件相同，无需 repository: 字段。
+
+# 企业微信评分阈值：Review 分数严格低于此值才推送；留空则始终推送
+wecom_score_threshold: 80
+
+# 默认跳过规则：匹配 MR/PR 标题或任意 commit message 时跳过 AI Review
+# YAML 中正则的反斜杠需要双写（\\[ 表示字面量 \[）
+review_skip_regex:
+  - "\\[skip review\\]"   # 标题或提交信息含 [skip review]
+  - "\\[no review\\]"     # 标题或提交信息含 [no review]
+  - "^Revert "            # revert 提交自动跳过

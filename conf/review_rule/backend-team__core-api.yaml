@@ -1,0 +1,12 @@
+# 核心后端服务规则示例
+# repository 字段声明归属仓库，支持 namespace/project（GitLab）或 owner/repo（GitHub/Gitea）
+# 匹配优先级：full_name > project_name > 短项目名，不区分大小写
+repository: "backend-team/core-api"
+
+wecom_webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb"
+wecom_score_threshold: 70      # 比默认更严格，低于 70 分才推送
+
+# 仓库级规则配置后会覆盖 default.yaml 中的 review_skip_regex
+review_skip_regex:
+  - "^chore:"
+  - "\\[skip review\\]"
