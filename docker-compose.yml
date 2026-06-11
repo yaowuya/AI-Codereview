@@ -9,8 +9,8 @@ services:
       - "5001:5001"
       - "5002:5002"
     volumes:
-      - ./data:/app/data
-      - ./log:/app/log
+      - /home/ai-codereview/data:/app/data
+      - /home/ai-codereview/log:/app/log
     env_file:
       - ./conf/.env
     restart: unless-stopped
