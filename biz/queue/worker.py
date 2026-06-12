@@ -8,6 +8,7 @@ from biz.platforms.gitlab.webhook_handler import filter_changes, MergeRequestHan
 from biz.platforms.github.webhook_handler import filter_changes as filter_github_changes, PullRequestHandler as GithubPullRequestHandler, PushHandler as GithubPushHandler
 from biz.platforms.gitea.webhook_handler import filter_changes as filter_gitea_changes, PullRequestHandler as GiteaPullRequestHandler, \
     PushHandler as GiteaPushHandler
+from biz.llm.exceptions import LLMRequestRejectedError
 from biz.service.review_service import ReviewService
 from biz.utils.code_reviewer import CodeReviewer
 from biz.utils.im import notifier
@@ -28,6 +29,20 @@ def _should_skip_review(repository_full_name=None, project_name=None, title=None
         )
         return True
     return False
+
+
+def _review_changes(changes, commits, repository_full_name=None, project_name=None) -> str:
+    commits_text = ';'.join((commit.get('message') or '').strip() for commit in commits or [])
+    try:
+        return CodeReviewer(
+            repository_full_name=repository_full_name,
+            project_name=project_name,
+        ).review_and_strip_code(str(changes), commits_text)
+    except LLMRequestRejectedError as exc:
+        logger.warning(
+            f"AI Review request rejected for repository '{repository_full_name or project_name}': {exc}"
+        )
+        return str(exc)
 
 
 
@@ -63,8 +78,7 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
             review_result = "关注的文件没有修改"
 
             if len(changes) > 0:
-                commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-                review_result = CodeReviewer(repository_full_name=repository_full_name, project_name=project_name).review_and_strip_code(str(changes), commits_text)
+                review_result = _review_changes(changes, commits, repository_full_name, project_name)
                 score = CodeReviewer.parse_review_score(review_text=review_result)
                 for item in changes:
                     additions += item['additions']
@@ -169,8 +183,7 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
             deletions += item.get('deletions', 0)
 
         # review 代码
-        commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-        review_result = CodeReviewer(repository_full_name=repository_full_name, project_name=mr_project_name).review_and_strip_code(str(changes), commits_text)
+        review_result = _review_changes(changes, commits, repository_full_name, mr_project_name)
 
         # 将review结果提交到Gitlab的 notes
         handler.add_merge_request_notes(f'Auto Review Result: \n{review_result}')
@@ -234,8 +247,7 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
             review_result = "关注的文件没有修改"
 
             if len(changes) > 0:
-                commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-                review_result = CodeReviewer(repository_full_name=repository_full_name, project_name=project_name).review_and_strip_code(str(changes), commits_text)
+                review_result = _review_changes(changes, commits, repository_full_name, project_name)
                 score = CodeReviewer.parse_review_score(review_text=review_result)
                 for item in changes:
                     additions += item.get('additions', 0)
@@ -330,8 +342,7 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
             deletions += item.get('deletions', 0)
 
         # review 代码
-        commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-        review_result = CodeReviewer(repository_full_name=repository_full_name, project_name=gh_project_name).review_and_strip_code(str(changes), commits_text)
+        review_result = _review_changes(changes, commits, repository_full_name, gh_project_name)
 
         # 将review结果提交到GitHub的 notes
         handler.add_pull_request_notes(f'Auto Review Result: \n{review_result}')
@@ -394,8 +405,7 @@ def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str
             review_result = "关注的文件没有修改"
 
             if len(changes) > 0:
-                commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-                review_result = CodeReviewer(repository_full_name=repository_full_name, project_name=project_name).review_and_strip_code(str(changes), commits_text)
+                review_result = _review_changes(changes, commits, repository_full_name, project_name)
                 score = CodeReviewer.parse_review_score(review_text=review_result)
                 for item in changes:
                     additions += item.get('additions', 0)
@@ -484,8 +494,7 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
             additions += item.get('additions', 0)
             deletions += item.get('deletions', 0)
 
-        commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-        review_result = CodeReviewer(repository_full_name=repository_full_name, project_name=gitea_project_name).review_and_strip_code(str(changes), commits_text)
+        review_result = _review_changes(changes, commits, repository_full_name, gitea_project_name)
 
         handler.add_pull_request_notes(f'Auto Review Result: \n{review_result}')
 

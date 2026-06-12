@@ -6,10 +6,17 @@ from typing import Dict, Any, List, Optional
 import yaml
 from jinja2 import Template
 
+from biz.llm.exceptions import LLMRequestRejectedError
 from biz.llm.factory import Factory
 from biz.utils.log import logger
 from biz.utils.review_rules import ReviewRules
 from biz.utils.token_util import count_tokens, truncate_text_by_tokens
+
+
+LLM_REJECTION_MESSAGE = (
+    "AI Review 请求被模型服务拒绝，可能是本次代码变更或提交信息触发了模型服务的风险策略。"
+    "请检查变更内容，或通过 review_skip_regex 跳过该提交。"
+)
 
 
 class BaseReviewer(abc.ABC):
@@ -78,7 +85,14 @@ class BaseReviewer(abc.ABC):
     def call_llm(self, messages: List[Dict[str, Any]]) -> str:
         """调用 LLM 进行代码审核"""
         logger.info(f"向 AI 发送代码 Review 请求, messages: {messages}")
-        review_result = self.client.completions(messages=messages)
+        try:
+            review_result = self.client.completions(messages=messages)
+        except Exception as exc:
+            error_text = str(exc)
+            if "considered high risk" in error_text or "request was rejected" in error_text:
+                logger.warning(f"AI Review 请求被模型服务拒绝: {error_text}")
+                raise LLMRequestRejectedError(LLM_REJECTION_MESSAGE) from exc
+            raise
         logger.info(f"收到 AI 返回结果: {review_result}")
         return review_result
 
