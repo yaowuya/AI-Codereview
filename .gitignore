@@ -18,6 +18,10 @@ conf/review_rule/*.yml
 __pycache__/
 .cursorignore
 .cursor
-.claude
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/gitlab-mr-replay/
+!.claude/skills/gitlab-mr-replay/**
 .mcp.json
 .codegraph

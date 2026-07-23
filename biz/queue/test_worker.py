@@ -10,7 +10,7 @@ class _RejectingReviewer:
         self.repository_full_name = repository_full_name
         self.project_name = project_name
 
-    def review_and_strip_code(self, changes_text: str, commits_text: str = "") -> str:
+    def review_changes_in_batches(self, changes, commits_text: str = "") -> str:
         raise LLMRequestRejectedError("AI Review 请求被模型服务拒绝，可能是本次代码变更或提交信息触发了模型服务的风险策略。")
 
 
@@ -19,7 +19,7 @@ class _UnavailableReviewer:
         self.repository_full_name = repository_full_name
         self.project_name = project_name
 
-    def review_and_strip_code(self, changes_text: str, commits_text: str = "") -> str:
+    def review_changes_in_batches(self, changes, commits_text: str = "") -> str:
         raise LLMServiceUnavailableError(provider="openai", status_code=504, request_id="req-123")
 
 

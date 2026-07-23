@@ -69,7 +69,7 @@ def _review_changes(changes, commits, repository_full_name=None, project_name=No
         return CodeReviewer(
             repository_full_name=repository_full_name,
             project_name=project_name,
-        ).review_and_strip_code(str(changes), commits_text)
+        ).review_changes_in_batches(changes, commits_text)
     except LLMRequestRejectedError as exc:
         logger.warning(
             f"AI Review request rejected for repository '{repository_full_name or project_name}': {exc}"
