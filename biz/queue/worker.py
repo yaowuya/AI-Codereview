@@ -8,7 +8,7 @@ from biz.platforms.gitlab.webhook_handler import filter_changes, MergeRequestHan
 from biz.platforms.github.webhook_handler import filter_changes as filter_github_changes, PullRequestHandler as GithubPullRequestHandler, PushHandler as GithubPushHandler
 from biz.platforms.gitea.webhook_handler import filter_changes as filter_gitea_changes, PullRequestHandler as GiteaPullRequestHandler, \
     PushHandler as GiteaPushHandler
-from biz.llm.exceptions import LLMRequestRejectedError
+from biz.llm.exceptions import LLMRequestRejectedError, LLMServiceUnavailableError
 from biz.service.review_service import ReviewService
 from biz.utils.code_reviewer import CodeReviewer
 from biz.utils.im import notifier
@@ -31,13 +31,45 @@ def _should_skip_review(repository_full_name=None, project_name=None, title=None
     return False
 
 
+def _summarize_changes(changes) -> dict:
+    return {
+        "file_count": len(changes),
+        "paths": [item.get("new_path") or item.get("filename") for item in changes],
+        "additions": sum(item.get("additions", 0) for item in changes),
+        "deletions": sum(item.get("deletions", 0) for item in changes),
+        "diff_chars": sum(len(item.get("diff") or item.get("patch") or "") for item in changes),
+    }
+
+
+def _notify_llm_service_unavailable(exc: LLMServiceUnavailableError,
+                                    project_name=None, repository_full_name=None) -> None:
+    details = ["AI 模型服务暂时不可用，请稍后重新触发代码审查。"]
+    if exc.status_code is not None:
+        details.append(f"HTTP 状态: {exc.status_code}")
+    if exc.request_id:
+        details.append(f"请求 ID: {exc.request_id}")
+    content = "\n".join(details)
+    notifier.send_notification(
+        content=content,
+        project_name=project_name,
+        repository_full_name=repository_full_name,
+    )
+    logger.warning(
+        "LLM service unavailable: provider=%s status_code=%s request_id=%s repository=%s",
+        exc.provider,
+        exc.status_code,
+        exc.request_id,
+        repository_full_name or project_name,
+    )
+
+
 def _review_changes(changes, commits, repository_full_name=None, project_name=None) -> str:
     commits_text = ';'.join((commit.get('message') or '').strip() for commit in commits or [])
     try:
         return CodeReviewer(
             repository_full_name=repository_full_name,
             project_name=project_name,
-        ).review_and_strip_code(str(changes), commits_text)
+        ).review_changes_in_batches(changes, commits_text)
     except LLMRequestRejectedError as exc:
         logger.warning(
             f"AI Review request rejected for repository '{repository_full_name or project_name}': {exc}"
@@ -71,7 +103,7 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
         if push_review_enabled:
             # 获取PUSH的changes
             changes = handler.get_push_changes()
-            logger.info('changes: %s', changes)
+            logger.info('changes summary: %s', _summarize_changes(changes))
             changes = filter_changes(changes)
             if not changes:
                 logger.info('未检测到PUSH代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
@@ -101,6 +133,9 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
             repository_full_name=repository_full_name,
         ))
 
+    except LLMServiceUnavailableError as exc:
+        _notify_llm_service_unavailable(exc, project_name=project_name,
+                                        repository_full_name=repository_full_name)
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message, project_name=project_name,
@@ -170,7 +205,7 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
         # 仅仅在MR创建或更新时进行Code Review
         # 获取Merge Request的changes
         changes = handler.get_merge_request_changes()
-        logger.info('changes: %s', changes)
+        logger.info('changes summary: %s', _summarize_changes(changes))
         changes = filter_changes(changes)
         if not changes:
             logger.info('未检测到有关代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
@@ -209,6 +244,9 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
             )
         )
 
+    except LLMServiceUnavailableError as exc:
+        _notify_llm_service_unavailable(exc, project_name=mr_project_name,
+                                        repository_full_name=repository_full_name)
     except Exception as e:
         error_message = f'AI Code Review 服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message, project_name=mr_project_name,
@@ -240,7 +278,7 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
         if push_review_enabled:
             # 获取PUSH的changes
             changes = handler.get_push_changes()
-            logger.info('changes: %s', changes)
+            logger.info('changes summary: %s', _summarize_changes(changes))
             changes = filter_github_changes(changes)
             if not changes:
                 logger.info('未检测到PUSH代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
@@ -270,6 +308,9 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
             repository_full_name=repository_full_name,
         ))
 
+    except LLMServiceUnavailableError as exc:
+        _notify_llm_service_unavailable(exc, project_name=project_name,
+                                        repository_full_name=repository_full_name)
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message, project_name=project_name,
@@ -329,7 +370,7 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
         # 仅仅在PR创建或更新时进行Code Review
         # 获取Pull Request的changes
         changes = handler.get_pull_request_changes()
-        logger.info('changes: %s', changes)
+        logger.info('changes summary: %s', _summarize_changes(changes))
         changes = filter_github_changes(changes)
         if not changes:
             logger.info('未检测到有关代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
@@ -367,6 +408,9 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
                 repository_full_name=repository_full_name,
             ))
 
+    except LLMServiceUnavailableError as exc:
+        _notify_llm_service_unavailable(exc, project_name=gh_project_name,
+                                        repository_full_name=repository_full_name)
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message, project_name=gh_project_name,
@@ -398,7 +442,7 @@ def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str
         deletions = 0
         if push_review_enabled:
             changes = handler.get_push_changes()
-            logger.info('changes: %s', changes)
+            logger.info('changes summary: %s', _summarize_changes(changes))
             changes = filter_gitea_changes(changes)
             if not changes:
                 logger.info('未检测到PUSH代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
@@ -430,6 +474,9 @@ def handle_gitea_push_event(webhook_data: dict, gitea_token: str, gitea_url: str
             repository_full_name=repository_full_name,
         ))
 
+    except LLMServiceUnavailableError as exc:
+        _notify_llm_service_unavailable(exc, project_name=project_name,
+                                        repository_full_name=repository_full_name)
     except Exception as e:
         error_message = f'服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message, project_name=project_name,
@@ -482,7 +529,7 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
             return
 
         changes = handler.get_pull_request_changes()
-        logger.info('changes: %s', changes)
+        logger.info('changes summary: %s', _summarize_changes(changes))
         changes = filter_gitea_changes(changes)
         if not changes:
             logger.info('未检测到有关代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
@@ -520,6 +567,9 @@ def handle_gitea_pull_request_event(webhook_data: dict, gitea_token: str, gitea_
                 repository_full_name=repository_full_name,
             ))
 
+    except LLMServiceUnavailableError as exc:
+        _notify_llm_service_unavailable(exc, project_name=gitea_project_name,
+                                        repository_full_name=repository_full_name)
     except Exception as e:
         error_message = f'AI Code Review 服务出现未知错误: {str(e)}\n{traceback.format_exc()}'
         notifier.send_notification(content=error_message, project_name=gitea_project_name,

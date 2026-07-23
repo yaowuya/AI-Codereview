@@ -47,6 +47,15 @@ class WeComNotifierTest(unittest.TestCase):
             self.assertFalse(notifier._should_send_by_score(
                 score=70, project_name="service-api", repository_full_name="group/service-api"))
 
+    def test_missing_score_does_not_compare_with_threshold(self):
+        d = self.write_rules_dir(repo_files={
+            "api.yaml": "repository: group/service-api\nwecom_score_threshold: 70\n",
+        })
+        notifier = WeComNotifier()
+        with patch.dict(os.environ, {"REVIEW_RULES_CONFIG_DIR": d}, clear=False):
+            self.assertTrue(notifier._should_send_by_score(
+                score=None, project_name="service-api", repository_full_name="group/service-api"))
+
 
 if __name__ == "__main__":
     unittest.main()
