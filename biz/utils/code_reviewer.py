@@ -84,7 +84,12 @@ class BaseReviewer(abc.ABC):
 
     def call_llm(self, messages: List[Dict[str, Any]]) -> str:
         """调用 LLM 进行代码审核"""
-        logger.info(f"向 AI 发送代码 Review 请求, messages: {messages}")
+        content_chars = sum(len(message.get("content", "")) for message in messages)
+        logger.info(
+            "Sending AI review request: message_count=%s content_chars=%s",
+            len(messages),
+            content_chars,
+        )
         try:
             review_result = self.client.completions(messages=messages)
         except Exception as exc:
@@ -93,7 +98,7 @@ class BaseReviewer(abc.ABC):
                 logger.warning(f"AI Review 请求被模型服务拒绝: {error_text}")
                 raise LLMRequestRejectedError(LLM_REJECTION_MESSAGE) from exc
             raise
-        logger.info(f"收到 AI 返回结果: {review_result}")
+        logger.info("Received AI review response: response_chars=%s", len(review_result or ""))
         return review_result
 
     @abc.abstractmethod
